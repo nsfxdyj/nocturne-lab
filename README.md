@@ -2,7 +2,7 @@
 
 一个可以许愿的交互式星空。纯 Canvas + WebAudio，零依赖，单文件（`index.html`），双击即可运行。
 
-**在线体验 → http://nocturne.xxz的试验场.xyz**（部署于阿里云杭州 ECS + nginx，域名解析在 Cloudflare）
+**在线体验 → https://nocturne.xxz的试验场.xyz**（部署于阿里云杭州 ECS + nginx + Let's Encrypt HTTPS，域名解析在 Cloudflare）
 
 ## 玩法
 
