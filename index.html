@@ -116,17 +116,37 @@
 
 const canvas = document.getElementById("sky");
 const ctx = canvas.getContext("2d");
-const DPR = Math.min(window.devicePixelRatio || 1, 2);
 
-let W = 0, H = 0;
+/* 有效渲染倍率 = 设备 DPR × 页面缩放（visualViewport.scale）。
+   不再把 DPR 卡在 2：高分屏手机（DPR 2.75~3.5）原先直接丢失 30~50% 物理像素，
+   捏合放大时浏览器拉伸低分位图导致光晕发糊——现在缩放变化会重建后备存储。
+   性能护栏：后备存储宽度不超过 6000px，超限则等比降档。 */
+function effectiveRatio() {
+  const zoom = (window.visualViewport && window.visualViewport.scale) || 1;
+  let ratio = (window.devicePixelRatio || 1) * zoom;
+  const maxW = 6000;
+  if (window.innerWidth * ratio > maxW) ratio = maxW / window.innerWidth;
+  return Math.min(ratio, 4);
+}
+
+let W = 0, H = 0, RATIO = 1;
 function resize() {
   W = window.innerWidth; H = window.innerHeight;
-  canvas.width = W * DPR; canvas.height = H * DPR;
+  RATIO = effectiveRatio();
+  canvas.width = Math.round(W * RATIO);
+  canvas.height = Math.round(H * RATIO);
   canvas.style.width = W + "px"; canvas.style.height = H + "px";
-  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.setTransform(RATIO, 0, 0, RATIO, 0, 0);
 }
 window.addEventListener("resize", resize);
+if (window.visualViewport) window.visualViewport.addEventListener("resize", resize);
 resize();
+
+/* 缩放状态下 clientX/Y 相对视觉视口，需换算回布局视口坐标 */
+function toLayout(x, y) {
+  const vv = window.visualViewport;
+  return vv ? { x: x + vv.offsetLeft, y: y + vv.offsetTop } : { x, y };
+}
 
 /* ---------- 星座数据（虚拟天球坐标 1000 x 620，分五区排布互不重叠） ---------- */
 /* c: 星色 tint；m: 星等（越大越亮） */
@@ -210,7 +230,10 @@ for (let i = 0; i < BG_COUNT; i++) {
 
 /* ---------- 天体投影：虚拟坐标 → 屏幕（含缓慢天球漂移 + 视差） ---------- */
 const mouse = { x: W / 2, y: H / 2, px: 0, py: 0 };
-window.addEventListener("mousemove", e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+window.addEventListener("mousemove", e => {
+  const p = toLayout(e.clientX, e.clientY);
+  mouse.x = p.x; mouse.y = p.y;
+});
 
 let drift = 0;
 function project(vx, vy, layer) {
@@ -360,11 +383,12 @@ function findHover(mx, my) {
 
 window.addEventListener("click", e => {
   if (e.target === soundBtn) return;
-  const h = findHover(e.clientX, e.clientY);
+  const pos = toLayout(e.clientX, e.clientY);
+  const h = findHover(pos.x, pos.y);
   if (h) {
     makeWish(h.p.x, h.p.y, CONSTELLATIONS[h.ci].stars[h.si].m);
   } else {
-    makeWish(e.clientX, e.clientY, rand(0.6, 1.4));
+    makeWish(pos.x, pos.y, rand(0.6, 1.4));
   }
 });
 
@@ -389,6 +413,10 @@ function drawStar(x, y, r, color, alpha, glow) {
   }
   ctx.fillStyle = color;
   ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  /* 锐利星核：放大后仍保持清晰的光点 */
+  ctx.globalAlpha = Math.min(1, alpha + 0.25);
+  ctx.fillStyle = "#ffffff";
+  ctx.beginPath(); ctx.arc(x, y, Math.max(r * 0.42, 0.7), 0, Math.PI * 2); ctx.fill();
   ctx.globalAlpha = 1;
 }
 
@@ -481,8 +509,8 @@ function frame(now) {
     tooltip.querySelector(".t-name").innerHTML = `${c.name}<span>${c.latin.toUpperCase()}</span>`;
     tooltip.querySelector(".t-star").textContent = s.n;
     tooltip.querySelector(".t-lore").textContent = c.lore;
-    tooltip.style.left = Math.min(W - 300, hovered.p.x + 18) + "px";
-    tooltip.style.top = Math.min(H - 120, hovered.p.y + 18) + "px";
+    tooltip.style.left = Math.min(W - 300, hovered.p.x + 18 - (window.visualViewport ? window.visualViewport.offsetLeft : 0)) + "px";
+    tooltip.style.top = Math.min(H - 120, hovered.p.y + 18 - (window.visualViewport ? window.visualViewport.offsetTop : 0)) + "px";
     tooltip.classList.add("on");
     canvas.style.cursor = "pointer";
   } else {
