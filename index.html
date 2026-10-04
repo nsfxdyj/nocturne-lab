@@ -81,6 +81,18 @@
   }
   #soundBtn:hover { color: var(--ink); border-color: rgba(232, 236, 255, 0.4); }
   #soundBtn.on { color: var(--accent); border-color: rgba(255, 217, 138, 0.5); box-shadow: 0 0 18px rgba(255, 217, 138, 0.25); }
+
+  #showerBtn {
+    position: fixed; z-index: 30; bottom: 22px; right: 84px;
+    height: 44px; padding: 0 18px; border-radius: 999px;
+    border: 1px solid rgba(232, 236, 255, 0.15);
+    background: rgba(6, 8, 22, 0.5); color: var(--dim);
+    cursor: pointer; font-size: 13px; letter-spacing: 0.18em; line-height: 1;
+    transition: all 0.3s ease; backdrop-filter: blur(6px);
+    font-family: inherit;
+  }
+  #showerBtn:hover { color: var(--ink); border-color: rgba(232, 236, 255, 0.4); }
+  #showerBtn:disabled { opacity: 0.35; cursor: default; }
 </style>
 </head>
 <body>
@@ -95,7 +107,7 @@
   <div class="wishes">今夜已许下 <em id="wishCount">0</em> 个愿望</div>
 </div>
 <div class="hud bottom">
-  <div class="hint">移动 · 眺望群星　/　悬停 · 聆听星座　/　点击星辰 · 许愿奏乐</div>
+  <div class="hint">移动 · 眺望群星　/　悬停或长按 · 聆听星座　/　点击星辰 · 许愿奏乐</div>
 </div>
 
 <div id="tooltip">
@@ -104,6 +116,7 @@
   <div class="t-lore"></div>
 </div>
 <div id="toast"></div>
+<button id="showerBtn" title="召唤流星雨">✦ 流星雨</button>
 <button id="soundBtn" title="环境音">♪</button>
 
 <script>
@@ -148,7 +161,7 @@ function toLayout(x, y) {
   return vv ? { x: x + vv.offsetLeft, y: y + vv.offsetTop } : { x, y };
 }
 
-/* ---------- 星座数据（虚拟天球坐标 1000 x 620，分五区排布互不重叠） ---------- */
+/* ---------- 星座数据（虚拟天球坐标 1000 x 800，十一组天体分十区排布） ---------- */
 /* c: 星色 tint；m: 星等（越大越亮） */
 const CONSTELLATIONS = [
   {
@@ -211,21 +224,191 @@ const CONSTELLATIONS = [
     ],
     lines: [[1,3],[2,5],[3,4],[4,5],[3,6],[5,7],[1,0],[2,0]]
   },
+  {
+    name: "小熊座 · 北极星", latin: "Ursa Minor", lore: "小熊的尾巴尖上住着北极星——千百年来，迷航的人只要找到它，就找到了北方。",
+    stars: [
+      { n: "北极星 · Polaris", x: 885, y: 92,  m: 1.9, c: "#f4f8ff" },
+      { n: "北极二 · Kochab",  x: 930, y: 105, m: 1.5, c: "#ffc890" },
+      { n: "北极三 · Pherkad", x: 948, y: 140, m: 1.3, c: "#cfe0ff" },
+      { n: "勾陈一 · η UMi",   x: 925, y: 168, m: 1.1, c: "#cfe0ff" },
+      { n: "勾陈四 · ζ UMi",   x: 890, y: 178, m: 1.2, c: "#cfe0ff" },
+      { n: "勾陈三 · ε UMi",   x: 852, y: 160, m: 1.2, c: "#cfe0ff" },
+      { n: "勾陈二 · δ UMi",   x: 858, y: 120, m: 1.2, c: "#cfe0ff" },
+    ],
+    lines: [[0,6],[6,5],[5,4],[4,3],[3,2],[2,1],[1,6]]
+  },
+  {
+    name: "双子座", latin: "Gemini", lore: "孪生兄弟卡斯托耳与波吕丢刻斯，轮流活在人间与冥界——夜空中最手足情深的一对星。",
+    stars: [
+      { n: "北河二 · Castor",  x: 520, y: 298, m: 1.6, c: "#eef2ff" },
+      { n: "井宿一 · μ Gem",   x: 552, y: 280, m: 1.2, c: "#ffc890" },
+      { n: "井宿二 · ε Gem",   x: 584, y: 296, m: 1.3, c: "#cfe0ff" },
+      { n: "井宿三 · η Gem",   x: 616, y: 332, m: 1.3, c: "#cfe0ff" },
+      { n: "北河三 · Pollux",  x: 500, y: 368, m: 1.7, c: "#ffe0b0" },
+      { n: "天樽二 · δ Gem",   x: 536, y: 412, m: 1.2, c: "#cfe0ff" },
+      { n: "天樽一 · ζ Gem",   x: 572, y: 448, m: 1.3, c: "#cfe0ff" },
+    ],
+    lines: [[0,1],[1,2],[2,3],[4,5],[5,6],[6,3]]
+  },
+  {
+    name: "天蝎座", latin: "Scorpius", lore: "猎户 Orion 的宿敌，被它蛰死的英雄化为星辰——心宿二，夏夜南方最红的一滴血。",
+    stars: [
+      { n: "房宿一 · π Sco",      x: 400, y: 585, m: 1.0, c: "#cfe0ff" },
+      { n: "房宿二 · δ Sco",      x: 420, y: 562, m: 1.1, c: "#cfe0ff" },
+      { n: "房宿三 · β Sco",      x: 442, y: 572, m: 1.3, c: "#cfe0ff" },
+      { n: "心宿二 · Antares",    x: 465, y: 640, m: 1.8, c: "#ff8a5c" },
+      { n: "尾宿一 · σ Sco",      x: 480, y: 692, m: 1.2, c: "#cfe0ff" },
+      { n: "尾宿二 · τ Sco",      x: 500, y: 726, m: 1.1, c: "#cfe0ff" },
+      { n: "尾宿三 · ε Sco",      x: 530, y: 750, m: 1.2, c: "#cfe0ff" },
+      { n: "尾宿四 · ζ Sco",      x: 565, y: 764, m: 1.2, c: "#cfe0ff" },
+      { n: "尾宿五 · η Sco",      x: 600, y: 756, m: 1.1, c: "#cfe0ff" },
+      { n: "尾宿六 · θ Sco",      x: 628, y: 726, m: 1.1, c: "#cfe0ff" },
+      { n: "尾宿七 · ι Sco",      x: 640, y: 690, m: 1.0, c: "#cfe0ff" },
+      { n: "尾宿八 · κ Sco",      x: 630, y: 656, m: 1.0, c: "#cfe0ff" },
+      { n: "尾宿九 · Shaula",     x: 612, y: 630, m: 1.4, c: "#e8eeff" },
+      { n: "尾宿增三 · Lesath",   x: 592, y: 646, m: 1.2, c: "#cfe0ff" },
+    ],
+    lines: [[0,1],[1,2],[0,3],[2,3],[3,4],[4,5],[5,6],[6,7],[7,8],[8,9],[9,10],[10,11],[11,12],[12,13]]
+  },
+  {
+    name: "射手座 · 茶壶", latin: "Sagittarius", lore: "银河最浓的方向上，一壶茶正给银河水加热——'茶壶'是观星者私下叫开的名字。",
+    stars: [
+      { n: "斗宿一 · Kaus Borealis",  x: 718, y: 552, m: 1.3, c: "#ffe9b8" },
+      { n: "斗宿二 · Kaus Media",     x: 682, y: 592, m: 1.4, c: "#cfe0ff" },
+      { n: "斗宿三 · Kaus Australis", x: 708, y: 638, m: 1.5, c: "#cfe0ff" },
+      { n: "箕宿一 · Ascella",        x: 746, y: 630, m: 1.3, c: "#cfe0ff" },
+      { n: "斗宿四 · Nunki",          x: 756, y: 592, m: 1.4, c: "#cfe0ff" },
+      { n: "箕宿二 · Alnasl",         x: 768, y: 562, m: 1.2, c: "#ffc890" },
+      { n: "箕宿三 · φ Sgr",          x: 730, y: 600, m: 1.0, c: "#cfe0ff" },
+      { n: "斗宿五 · π Sgr",          x: 658, y: 578, m: 1.0, c: "#cfe0ff" },
+    ],
+    lines: [[0,1],[1,2],[2,3],[3,4],[4,0],[5,4],[7,1],[0,6]]
+  },
+  {
+    name: "狮子座", latin: "Leo", lore: "涅墨亚的狮子，被赫拉克勒斯降伏后升上天空。反问号'镰刀'是它的头颅。",
+    stars: [
+      { n: "轩辕十四 · Regulus",  x: 830, y: 545, m: 1.7, c: "#bfe0ff" },
+      { n: "轩辕十三 · η Leo",    x: 862, y: 560, m: 1.1, c: "#cfe0ff" },
+      { n: "轩辕十二 · Algieba",  x: 890, y: 588, m: 1.5, c: "#ffd9a0" },
+      { n: "轩辕十一 · ζ Leo",    x: 905, y: 622, m: 1.2, c: "#cfe0ff" },
+      { n: "轩辕十 · μ Leo",      x: 908, y: 660, m: 1.1, c: "#cfe0ff" },
+      { n: "轩辕九 · ε Leo",      x: 872, y: 682, m: 1.3, c: "#cfe0ff" },
+      { n: "轩辕十五 · Chertan",  x: 940, y: 650, m: 1.1, c: "#cfe0ff" },
+      { n: "西上相 · δ Leo",      x: 972, y: 690, m: 1.2, c: "#cfe0ff" },
+      { n: "五帝座一 · Denebola", x: 988, y: 738, m: 1.5, c: "#eef2ff" },
+    ],
+    lines: [[0,1],[1,2],[2,3],[3,4],[4,5],[5,1],[0,6],[6,7],[7,8],[8,0]]
+  },
+  {
+    name: "金牛座", latin: "Taurus", lore: "怒牛的 V 字形脸庞上，橙红的毕宿五是它燃烧的眼睛。",
+    stars: [
+      { n: "毕宿五 · Aldebaran", x: 200, y: 660, m: 1.7, c: "#ffc890" },
+      { n: "毕宿一 · ε Tau",     x: 148, y: 598, m: 1.3, c: "#cfe0ff" },
+      { n: "毕宿四 · γ Tau",     x: 245, y: 592, m: 1.4, c: "#fff3d6" },
+      { n: "天关 · ζ Tau",       x: 162, y: 640, m: 1.2, c: "#cfe0ff" },
+      { n: "五车五 · Elnath",    x: 330, y: 590, m: 1.5, c: "#bfe0ff" },
+    ],
+    lines: [[1,0],[0,2],[2,4],[1,3],[3,0]]
+  },
+  {
+    name: "昴星团 · 七姊妹", latin: "Pleiades", lore: "金牛肩上的迷你星团——视力好的人能分出六七颗星，古人用它测试眼力。",
+    stars: [
+      { n: "昴宿一", x: 302, y: 548, m: 0.8, c: "#bfe0ff" },
+      { n: "昴宿二", x: 322, y: 540, m: 0.9, c: "#bfe0ff" },
+      { n: "昴宿三", x: 338, y: 552, m: 0.7, c: "#bfe0ff" },
+      { n: "昴宿四", x: 318, y: 564, m: 0.8, c: "#bfe0ff" },
+      { n: "昴宿五", x: 334, y: 570, m: 0.6, c: "#bfe0ff" },
+      { n: "昴宿六", x: 310, y: 536, m: 1.0, c: "#eaf2ff" },
+    ],
+    lines: []
+  },
 ];
 
 /* ---------- 背景星野 ---------- */
 const rand = (a, b) => a + Math.random() * (b - a);
 const bgStars = [];
-const BG_COUNT = 420;
+const BG_COUNT = 620;
 for (let i = 0; i < BG_COUNT; i++) {
   const layer = Math.random();
   bgStars.push({
-    x: Math.random() * 1000, y: Math.random() * 620,
+    x: Math.random() * 1000, y: Math.random() * 800,
     r: layer < 0.6 ? rand(0.4, 0.9) : layer < 0.9 ? rand(0.9, 1.5) : rand(1.5, 2.3),
     layer: layer < 0.6 ? 0.3 : layer < 0.9 ? 0.6 : 1.0,
     tw: rand(0.5, 2.2), ph: rand(0, Math.PI * 2),
     c: Math.random() < 0.12 ? "#ffe9c4" : Math.random() < 0.1 ? "#b9d4ff" : "#eef2ff",
   });
+}
+
+/* ---------- 银河带：贯穿天鹅—射手—天蝎的虚拟路径 + 星尘 ---------- */
+/* 光带本体缓存在离屏 canvas（每帧 14 个大半径渐变在手机上太贵），
+   只有星尘每帧重绘；缩放/resize 时置脏重建 */
+const MW_PATH = [[1030,60],[960,140],[900,210],[826,330],[770,470],[712,595],[660,700],[600,860]];
+const mwDust = [];
+let mwLayer = null, mwLayerPad = 80;
+(function genDust() {
+  const segs = [];
+  let total = 0;
+  for (let i = 0; i < MW_PATH.length - 1; i++) {
+    const [x1, y1] = MW_PATH[i], [x2, y2] = MW_PATH[i + 1];
+    const len = Math.hypot(x2 - x1, y2 - y1);
+    segs.push({ x1, y1, x2, y2, len });
+    total += len;
+  }
+  for (let i = 0; i < 260; i++) {
+    let d = Math.random() * total, seg = segs[0];
+    for (const s of segs) { if (d <= s.len) { seg = s; break; } d -= s.len; }
+    const t = Math.random();
+    /* 垂直于路径方向的偏移，模拟银河的宽窄不均 */
+    const nx = -(seg.y2 - seg.y1) / seg.len, ny = (seg.x2 - seg.x1) / seg.len;
+    const off = (Math.random() + Math.random() + Math.random() - 1.5) * 46;
+    mwDust.push({
+      x: seg.x1 + (seg.x2 - seg.x1) * t + nx * off,
+      y: seg.y1 + (seg.y2 - seg.y1) * t + ny * off,
+      r: rand(0.3, 0.9), tw: rand(0.3, 1.2), ph: rand(0, Math.PI * 2),
+    });
+  }
+})();
+
+function buildMWLayer() {
+  const PAD = mwLayerPad;
+  const lw = W + PAD * 2, lh = H + PAD * 2;
+  mwLayer = document.createElement("canvas");
+  mwLayer._w = W; mwLayer._h = H; mwLayer._r = RATIO;
+  mwLayer.width = Math.round(lw * RATIO);
+  mwLayer.height = Math.round(lh * RATIO);
+  const o = mwLayer.getContext("2d");
+  o.setTransform(RATIO, 0, 0, RATIO, 0, 0);
+  const scale = skyScale();
+  const cx = lw / 2, cy = lh / 2;
+  const R = Math.max(W, H) * 0.16;
+  for (let i = 0; i < MW_PATH.length - 1; i++) {
+    const vx = (MW_PATH[i][0] + MW_PATH[i + 1][0]) / 2;
+    const vy = (MW_PATH[i][1] + MW_PATH[i + 1][1]) / 2;
+    const px = cx + (vx - 500) * scale, py = cy + (vy - 400) * scale;
+    const g = o.createRadialGradient(px, py, 0, px, py, R);
+    g.addColorStop(0, "rgba(168, 185, 255, 0.05)");
+    g.addColorStop(0.55, "rgba(150, 165, 235, 0.024)");
+    g.addColorStop(1, "rgba(140, 155, 230, 0)");
+    o.fillStyle = g;
+    o.beginPath(); o.arc(px, py, R, 0, Math.PI * 2); o.fill();
+  }
+}
+
+function drawMilkyWay() {
+  if (!mwLayer || mwLayer._w !== W || mwLayer._h !== H || mwLayer._r !== RATIO) buildMWLayer();
+  /* 光带随天球漂移/视差平移（缓存层不含运动，每帧只需一次 drawImage） */
+  const dx = Math.sin(drift * 0.05) * 14 * 0.6 - ((mouse.x - W / 2) / W) * 34 * 0.6;
+  const dy = Math.cos(drift * 0.037) * 8 * 0.6 - ((mouse.y - H / 2) / H) * 22 * 0.6;
+  ctx.drawImage(mwLayer, dx - mwLayerPad, dy - mwLayerPad, W + mwLayerPad * 2, H + mwLayerPad * 2);
+  /* 星尘 */
+  ctx.fillStyle = "#cdd8ff";
+  for (const d of mwDust) {
+    const p = project(d.x, d.y, 0.6);
+    if (p.x < -5 || p.x > W + 5 || p.y < -5 || p.y > H + 5) continue;
+    ctx.globalAlpha = 0.12 + 0.1 * (Math.sin(drift * d.tw + d.ph) * 0.5 + 0.5);
+    ctx.beginPath(); ctx.arc(p.x, p.y, d.r, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
 }
 
 /* ---------- 天体投影：虚拟坐标 → 屏幕（含缓慢天球漂移 + 视差） ---------- */
@@ -251,15 +434,23 @@ window.addEventListener("pointerup", () => clearTimeout(pinTimer), { passive: tr
 window.addEventListener("pointercancel", () => clearTimeout(pinTimer), { passive: true });
 
 let drift = 0;
+function skyScale() {
+  return Math.min(W / 1080, H / 860);
+}
 function project(vx, vy, layer) {
-  const scale = Math.min(W / 1080, H / 680);
+  const scale = skyScale();
   const driftX = Math.sin(drift * 0.05) * 14 * layer;
   const driftY = Math.cos(drift * 0.037) * 8 * layer;
   const px = (mouse.x - W / 2) / W, py = (mouse.y - H / 2) / H;
   return {
     x: W / 2 + (vx - 500) * scale + driftX - px * 34 * layer,
-    y: H / 2 + (vy - 310) * scale + driftY - py * 22 * layer,
+    y: H / 2 + (vy - 400) * scale + driftY - py * 22 * layer,
   };
+}
+/* 屏幕坐标 → 虚拟天球（project 的近似逆变换，忽略漂移/视差——量级 10~20px，可接受） */
+function unproject(x, y) {
+  const s = skyScale() || 1;
+  return { vx: (x - W / 2) / s + 500, vy: (y - H / 2) / s + 400 };
 }
 
 /* ---------- 流星 ---------- */
@@ -361,8 +552,22 @@ document.addEventListener("visibilitychange", () => {
 });
 
 /* ---------- 许愿 ---------- */
-let wishes = 0;
+/* 许愿星持久化：localStorage 安全读写（隐私模式降级为不保存） */
+const store = {
+  load() {
+    try { return JSON.parse(localStorage.getItem("nocturne.wishes")) || []; }
+    catch { return []; }
+  },
+  save(arr) {
+    try { localStorage.setItem("nocturne.wishes", JSON.stringify(arr)); } catch {}
+  },
+};
+/* wishStars: 虚拟天球坐标 {vx, vy}，每 7 颗连线成一个属于用户自己的星座 */
+let wishStars = store.load().filter(p => typeof p.vx === "number" && p.vx >= 0 && p.vx <= 1000 && p.vy >= 0 && p.vy <= 800);
+
+let wishes = wishStars.length;
 const wishCountEl = document.getElementById("wishCount");
+wishCountEl.textContent = wishes;
 const toastEl = document.getElementById("toast");
 let toastTimer = null;
 
@@ -373,16 +578,23 @@ function showToast(text) {
   toastTimer = setTimeout(() => toastEl.classList.remove("on"), 3200);
 }
 
-const MILESTONES = { 1: "第一颗愿望已升空", 7: "七曜同辉", 20: "流星雨为你而至 ✦", 50: "半百星辰，皆你所愿", 100: "百愿之夜，心想事成" };
+const MILESTONES = { 1: "第一颗愿望已升空", 7: "七愿连成星座，它只属于你 ✦", 20: "二十颗星辰，皆你所愿", 50: "半百星辰，皆你所愿", 100: "百愿之夜，心想事成" };
 
 function makeWish(x, y, starM) {
   wishes++;
   wishCountEl.textContent = wishes;
+  /* 记录到天上（虚拟坐标），明晚打开还在 */
+  const v = unproject(x, y);
+  v.vx = Math.max(10, Math.min(990, v.vx));
+  v.vy = Math.max(10, Math.min(790, v.vy));
+  wishStars.push(v);
+  store.save(wishStars);
   const noteIdx = Math.min(PENTA.length - 1, Math.round((starM / 1.8) * (PENTA.length - 1)));
   pluck(PENTA[noteIdx], rand(0.7, 1.0));
-  if (MILESTONES[wishes]) {
+  if (wishes % 7 === 0) {
+    showToast(`你的第 ${wishes / 7} 个星座诞生了 ✦`);
+  } else if (MILESTONES[wishes]) {
     showToast(MILESTONES[wishes]);
-    if (wishes === 20) showerUntil = performance.now() + 9000;
   }
   supernova(x, y, "#ffe9b8");
 }
@@ -404,7 +616,7 @@ function findHover(mx, my) {
 }
 
 window.addEventListener("click", e => {
-  if (e.target === soundBtn) return;
+  if (e.target.closest && e.target.closest("button")) return;
   const pos = toLayout(e.clientX, e.clientY);
   const h = findHover(pos.x, pos.y);
   if (h) {
@@ -412,6 +624,16 @@ window.addEventListener("click", e => {
   } else {
     makeWish(pos.x, pos.y, rand(0.6, 1.4));
   }
+});
+
+/* ---------- 流星雨开关 ---------- */
+const showerBtn = document.getElementById("showerBtn");
+showerBtn.addEventListener("click", () => {
+  showerUntil = performance.now() + 8000;
+  for (let i = 0; i < 6; i++) spawnMeteor();
+  showToast("流星雨为你而至 ✦");
+  showerBtn.disabled = true;
+  setTimeout(() => { showerBtn.disabled = false; }, 8000);
 });
 
 /* ---------- 时钟 ---------- */
@@ -477,6 +699,9 @@ function frame(now) {
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, W, H);
 
+  /* 银河带（在背景星野之下） */
+  drawMilkyWay();
+
   /* 背景星野 */
   for (const s of bgStars) {
     const p = project(s.x, s.y, s.layer);
@@ -512,6 +737,25 @@ function frame(now) {
         ctx.lineWidth = 1;
         ctx.beginPath(); ctx.arc(p.x, p.y, 10 + Math.sin(drift * 3) * 2, 0, Math.PI * 2); ctx.stroke();
       }
+    }
+  }
+
+  /* 许愿星：金色，缓慢脉动；每 7 颗连成一座属于用户的星座 */
+  if (wishStars.length) {
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(255, 217, 138, 0.35)";
+    ctx.beginPath();
+    for (let i = 1; i < wishStars.length; i++) {
+      if (i % 7 === 0) continue; // 每座用户星座从新的星开始
+      const a = project(wishStars[i - 1].vx, wishStars[i - 1].vy, 1);
+      const b = project(wishStars[i].vx, wishStars[i].vy, 1);
+      ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+    }
+    ctx.stroke();
+    for (let i = 0; i < wishStars.length; i++) {
+      const p = project(wishStars[i].vx, wishStars[i].vy, 1);
+      const pulse = 0.7 + 0.3 * Math.sin(drift * 2 + i * 0.9);
+      drawStar(p.x, p.y, 1.3, "#ffd98a", pulse, true);
     }
   }
 
