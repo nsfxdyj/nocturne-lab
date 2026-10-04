@@ -20,7 +20,7 @@
     user-select: none;
     -webkit-user-select: none;
   }
-  #sky { position: fixed; inset: 0; display: block; }
+  #sky { position: fixed; inset: 0; display: block; touch-action: none; }
 
   .hud { position: fixed; z-index: 10; pointer-events: none; }
   .hud.top-left { top: 28px; left: 32px; }
@@ -229,11 +229,26 @@ for (let i = 0; i < BG_COUNT; i++) {
 }
 
 /* ---------- 天体投影：虚拟坐标 → 屏幕（含缓慢天球漂移 + 视差） ---------- */
+/* Pointer Events 统一鼠标/触摸/触控笔：手机拖动同样驱动视差 */
 const mouse = { x: W / 2, y: H / 2, px: 0, py: 0 };
-window.addEventListener("mousemove", e => {
+window.addEventListener("pointermove", e => {
   const p = toLayout(e.clientX, e.clientY);
   mouse.x = p.x; mouse.y = p.y;
-});
+}, { passive: true });
+
+/* 触摸长按（480ms 不滑动）→ 固定显示该处星座提示 2.6 秒 */
+let pinTimer = null, pinUntil = 0, pinHover = null;
+window.addEventListener("pointerdown", e => {
+  if (e.pointerType !== "touch") return;
+  const p = toLayout(e.clientX, e.clientY);
+  clearTimeout(pinTimer);
+  pinTimer = setTimeout(() => {
+    pinHover = findHover(p.x, p.y);
+    pinUntil = performance.now() + 2600;
+  }, 480);
+}, { passive: true });
+window.addEventListener("pointerup", () => clearTimeout(pinTimer), { passive: true });
+window.addEventListener("pointercancel", () => clearTimeout(pinTimer), { passive: true });
 
 let drift = 0;
 function project(vx, vy, layer) {
@@ -338,6 +353,13 @@ soundBtn.addEventListener("click", () => {
   masterGain.gain.linearRampToValueAtTime(soundOn ? 0.9 : 0.0, t + 1.2);
 });
 
+/* 页面切到后台时挂起音频上下文，回前台再恢复 */
+document.addEventListener("visibilitychange", () => {
+  if (!audioCtx) return;
+  if (document.hidden) audioCtx.suspend();
+  else if (soundOn) audioCtx.resume();
+});
+
 /* ---------- 许愿 ---------- */
 let wishes = 0;
 const wishCountEl = document.getElementById("wishCount");
@@ -402,14 +424,35 @@ function tickClock() {
 setInterval(tickClock, 1000); tickClock();
 
 /* ---------- 主循环 ---------- */
+/* 光晕精灵图集：每帧几十个 createRadialGradient 是主要 CPU 开销，
+   改为按颜色预渲染到离屏 canvas，绘制时 drawImage 复用 */
+function hexToRgba(hex, a) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+}
+const glowCache = new Map();
+function glowSprite(color) {
+  let sp = glowCache.get(color);
+  if (sp) return sp;
+  const S = 64;
+  sp = document.createElement("canvas");
+  sp.width = sp.height = S;
+  const o = sp.getContext("2d");
+  const g = o.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+  g.addColorStop(0, hexToRgba(color, 1));
+  g.addColorStop(0.28, hexToRgba(color, 0.5));
+  g.addColorStop(1, hexToRgba(color, 0));
+  o.fillStyle = g;
+  o.fillRect(0, 0, S, S);
+  glowCache.set(color, sp);
+  return sp;
+}
+
 function drawStar(x, y, r, color, alpha, glow) {
   ctx.globalAlpha = alpha;
   if (glow) {
-    const g = ctx.createRadialGradient(x, y, 0, x, y, r * 5);
-    g.addColorStop(0, color);
-    g.addColorStop(1, "rgba(0,0,0,0)");
-    ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(x, y, r * 5, 0, Math.PI * 2); ctx.fill();
+    const R = r * 5;
+    ctx.drawImage(glowSprite(color), x - R, y - R, R * 2, R * 2);
   }
   ctx.fillStyle = color;
   ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
@@ -444,6 +487,7 @@ function frame(now) {
 
   /* 星座 */
   hovered = findHover(mouse.x, mouse.y);
+  if (!hovered && pinHover && performance.now() < pinUntil) hovered = pinHover;
   for (let ci = 0; ci < CONSTELLATIONS.length; ci++) {
     const c = CONSTELLATIONS[ci];
     const hot = hovered && hovered.ci === ci;
