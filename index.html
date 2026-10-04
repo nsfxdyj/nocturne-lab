@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nocturne Lab · 暗夜实验室</title>
+<style>
+  :root {
+    --ink: #e8ecff;
+    --dim: rgba(232, 236, 255, 0.55);
+    --faint: rgba(232, 236, 255, 0.28);
+    --accent: #ffd98a;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; background: #04050e; }
+  body {
+    font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: var(--ink);
+    cursor: crosshair;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  #sky { position: fixed; inset: 0; display: block; }
+
+  .hud { position: fixed; z-index: 10; pointer-events: none; }
+  .hud.top-left { top: 28px; left: 32px; }
+  .hud.top-right { top: 28px; right: 32px; text-align: right; }
+  .hud.bottom { bottom: 24px; left: 0; right: 0; text-align: center; }
+
+  .title {
+    font-size: 15px; letter-spacing: 0.42em; font-weight: 300;
+    color: var(--dim); text-transform: uppercase;
+  }
+  .title b { color: var(--ink); font-weight: 500; }
+  .subtitle {
+    margin-top: 6px; font-size: 12px; letter-spacing: 0.18em;
+    color: var(--faint);
+  }
+  .clock { font-size: 13px; letter-spacing: 0.2em; color: var(--dim); font-variant-numeric: tabular-nums; }
+  .wishes { margin-top: 6px; font-size: 12px; letter-spacing: 0.15em; color: var(--faint); }
+  .wishes em { font-style: normal; color: var(--accent); }
+
+  .hint {
+    display: inline-block; font-size: 12px; letter-spacing: 0.22em;
+    color: var(--faint); padding: 10px 22px;
+    border: 1px solid rgba(232, 236, 255, 0.08); border-radius: 999px;
+    background: rgba(6, 8, 22, 0.35); backdrop-filter: blur(6px);
+  }
+
+  #tooltip {
+    position: fixed; z-index: 20; pointer-events: none;
+    padding: 10px 16px; border-radius: 10px;
+    background: rgba(8, 11, 30, 0.82); backdrop-filter: blur(10px);
+    border: 1px solid rgba(160, 180, 255, 0.18);
+    opacity: 0; transform: translateY(6px);
+    transition: opacity 0.25s ease, transform 0.25s ease;
+    max-width: 280px;
+  }
+  #tooltip.on { opacity: 1; transform: translateY(0); }
+  #tooltip .t-name { font-size: 14px; letter-spacing: 0.08em; color: var(--ink); }
+  #tooltip .t-name span { color: var(--dim); font-size: 11px; margin-left: 8px; letter-spacing: 0.15em; }
+  #tooltip .t-star { font-size: 11px; color: var(--accent); margin-top: 3px; letter-spacing: 0.1em; }
+  #tooltip .t-lore { font-size: 12px; color: var(--dim); margin-top: 5px; line-height: 1.6; }
+
+  #toast {
+    position: fixed; z-index: 20; top: 22%; left: 50%;
+    transform: translateX(-50%); pointer-events: none;
+    font-size: 14px; letter-spacing: 0.3em; color: var(--accent);
+    text-shadow: 0 0 24px rgba(255, 217, 138, 0.6);
+    opacity: 0; transition: opacity 1.2s ease;
+  }
+  #toast.on { opacity: 1; }
+
+  #soundBtn {
+    position: fixed; z-index: 30; bottom: 22px; right: 28px;
+    width: 44px; height: 44px; border-radius: 50%;
+    border: 1px solid rgba(232, 236, 255, 0.15);
+    background: rgba(6, 8, 22, 0.5); color: var(--dim);
+    cursor: pointer; font-size: 17px; line-height: 1;
+    transition: all 0.3s ease; backdrop-filter: blur(6px);
+  }
+  #soundBtn:hover { color: var(--ink); border-color: rgba(232, 236, 255, 0.4); }
+  #soundBtn.on { color: var(--accent); border-color: rgba(255, 217, 138, 0.5); box-shadow: 0 0 18px rgba(255, 217, 138, 0.25); }
+</style>
+</head>
+<body>
+<canvas id="sky"></canvas>
+
+<div class="hud top-left">
+  <div class="title"><b>Nocturne Lab</b> · 暗夜实验室</div>
+  <div class="subtitle">A WISHFUL SKY, GENERATED TONIGHT</div>
+</div>
+<div class="hud top-right">
+  <div class="clock" id="clock">--:--:--</div>
+  <div class="wishes">今夜已许下 <em id="wishCount">0</em> 个愿望</div>
+</div>
+<div class="hud bottom">
+  <div class="hint">移动 · 眺望群星　/　悬停 · 聆听星座　/　点击星辰 · 许愿奏乐</div>
+</div>
+
+<div id="tooltip">
+  <div class="t-name"></div>
+  <div class="t-star"></div>
+  <div class="t-lore"></div>
+</div>
+<div id="toast"></div>
+<button id="soundBtn" title="环境音">♪</button>
+
+<script>
+"use strict";
+/* ============================================================
+   Nocturne Lab — 暗夜实验室
+   一个纯 Canvas 的交互式星空：真实星座、流星、超新星与五声音阶。
+   零依赖，单文件。
+   ============================================================ */
+
+const canvas = document.getElementById("sky");
+const ctx = canvas.getContext("2d");
+const DPR = Math.min(window.devicePixelRatio || 1, 2);
+
+let W = 0, H = 0;
+function resize() {
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width = W * DPR; canvas.height = H * DPR;
+  canvas.style.width = W + "px"; canvas.style.height = H + "px";
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+window.addEventListener("resize", resize);
+resize();
+
+/* ---------- 星座数据（虚拟天球坐标 1000 x 620，分五区排布互不重叠） ---------- */
+/* c: 星色 tint；m: 星等（越大越亮） */
+const CONSTELLATIONS = [
+  {
+    name: "大熊座 · 北斗", latin: "Ursa Major", lore: "斗柄东指，天下皆春。古人靠它辨认四季与北方。",
+    stars: [
+      { n: "天枢 · Dubhe",   x: 100, y: 110, m: 1.6, c: "#ffe9b8" },
+      { n: "天璇 · Merak",   x: 140, y: 180, m: 1.5, c: "#cfe0ff" },
+      { n: "天玑 · Phecda",  x: 215, y: 210, m: 1.4, c: "#cfe0ff" },
+      { n: "天权 · Megrez",  x: 272, y: 190, m: 1.2, c: "#cfe0ff" },
+      { n: "玉衡 · Alioth",  x: 340, y: 160, m: 1.5, c: "#cfe0ff" },
+      { n: "开阳 · Mizar",   x: 400, y: 142, m: 1.5, c: "#cfe0ff" },
+      { n: "摇光 · Alkaid",  x: 462, y: 172, m: 1.4, c: "#cfe0ff" },
+    ],
+    lines: [[0,1],[1,2],[2,3],[3,0],[3,4],[4,5],[5,6]]
+  },
+  {
+    name: "仙后座", latin: "Cassiopeia", lore: "埃塞俄比亚的王后，被罚永远绕着北极星旋转，夜空中最骄傲的 W。",
+    stars: [
+      { n: "王良一 · Caph",      x: 548, y: 196, m: 1.3, c: "#fff3d6" },
+      { n: "策 · Schedar",       x: 604, y: 124, m: 1.5, c: "#ffc890" },
+      { n: "阁道三 · γ Cas",     x: 656, y: 182, m: 1.4, c: "#cfe0ff" },
+      { n: "阁道二 · Ruchbah",   x: 708, y: 116, m: 1.3, c: "#cfe0ff" },
+      { n: "阁道一 · Segin",     x: 762, y: 172, m: 1.2, c: "#cfe0ff" },
+    ],
+    lines: [[0,1],[1,2],[2,3],[3,4]]
+  },
+  {
+    name: "天琴座", latin: "Lyra", lore: "织女星所在之处，也是俄耳甫斯的七弦琴——琴声曾让万物动容。",
+    stars: [
+      { n: "织女星 · Vega",     x: 430, y: 262, m: 1.8, c: "#bfe0ff" },
+      { n: "织女二 · ε Lyr",    x: 468, y: 314, m: 1.0, c: "#cfe0ff" },
+      { n: "织女三 · ζ Lyr",    x: 420, y: 342, m: 1.1, c: "#cfe0ff" },
+      { n: "渐台二 · Sheliak",  x: 382, y: 382, m: 1.2, c: "#cfe0ff" },
+      { n: "渐台三 · Sulafat",  x: 352, y: 412, m: 1.2, c: "#cfe0ff" },
+    ],
+    lines: [[0,1],[0,2],[1,2],[2,3],[3,4],[4,1]]
+  },
+  {
+    name: "天鹅座", latin: "Cygnus", lore: "天津四与牛郎织女隔'河'相望——'天津'，就是天河的渡口。",
+    stars: [
+      { n: "天津四 · Deneb",  x: 700, y: 236, m: 1.7, c: "#f4f8ff" },
+      { n: "天津一 · Sadr",   x: 826, y: 330, m: 1.4, c: "#fff3d6" },
+      { n: "天津九 · Gienah", x: 942, y: 414, m: 1.3, c: "#cfe0ff" },
+      { n: "天津二 · δ Cyg",  x: 760, y: 392, m: 1.2, c: "#cfe0ff" },
+      { n: "辇道增七 · Albireo", x: 958, y: 492, m: 1.2, c: "#ffc890" },
+    ],
+    lines: [[0,1],[1,4],[2,3],[3,1],[1,2]]
+  },
+  {
+    name: "猎户座", latin: "Orion", lore: "冬夜之王。腰带三星，在中国叫'福禄寿'——除夕之夜三星高照，新年就到了。",
+    stars: [
+      { n: "觜宿一 · Meissa",     x: 222, y: 222, m: 1.0, c: "#cfe0ff" },
+      { n: "参宿四 · Betelgeuse", x: 150, y: 300, m: 1.6, c: "#ff9a76" },
+      { n: "参宿五 · Bellatrix",  x: 288, y: 314, m: 1.4, c: "#cfe0ff" },
+      { n: "参宿一 · Alnitak",    x: 192, y: 418, m: 1.5, c: "#cfe0ff" },
+      { n: "参宿二 · Alnilam",    x: 220, y: 410, m: 1.5, c: "#cfe0ff" },
+      { n: "参宿三 · Mintaka",    x: 248, y: 406, m: 1.5, c: "#cfe0ff" },
+      { n: "参宿六 · Saiph",      x: 182, y: 540, m: 1.3, c: "#cfe0ff" },
+      { n: "参宿七 · Rigel",      x: 300, y: 528, m: 1.6, c: "#cfe0ff" },
+    ],
+    lines: [[1,3],[2,5],[3,4],[4,5],[3,6],[5,7],[1,0],[2,0]]
+  },
+];
+
+/* ---------- 背景星野 ---------- */
+const rand = (a, b) => a + Math.random() * (b - a);
+const bgStars = [];
+const BG_COUNT = 420;
+for (let i = 0; i < BG_COUNT; i++) {
+  const layer = Math.random();
+  bgStars.push({
+    x: Math.random() * 1000, y: Math.random() * 620,
+    r: layer < 0.6 ? rand(0.4, 0.9) : layer < 0.9 ? rand(0.9, 1.5) : rand(1.5, 2.3),
+    layer: layer < 0.6 ? 0.3 : layer < 0.9 ? 0.6 : 1.0,
+    tw: rand(0.5, 2.2), ph: rand(0, Math.PI * 2),
+    c: Math.random() < 0.12 ? "#ffe9c4" : Math.random() < 0.1 ? "#b9d4ff" : "#eef2ff",
+  });
+}
+
+/* ---------- 天体投影：虚拟坐标 → 屏幕（含缓慢天球漂移 + 视差） ---------- */
+const mouse = { x: W / 2, y: H / 2, px: 0, py: 0 };
+window.addEventListener("mousemove", e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+
+let drift = 0;
+function project(vx, vy, layer) {
+  const scale = Math.min(W / 1080, H / 680);
+  const driftX = Math.sin(drift * 0.05) * 14 * layer;
+  const driftY = Math.cos(drift * 0.037) * 8 * layer;
+  const px = (mouse.x - W / 2) / W, py = (mouse.y - H / 2) / H;
+  return {
+    x: W / 2 + (vx - 500) * scale + driftX - px * 34 * layer,
+    y: H / 2 + (vy - 310) * scale + driftY - py * 22 * layer,
+  };
+}
+
+/* ---------- 流星 ---------- */
+const meteors = [];
+let nextMeteor = performance.now() + 1500;
+let showerUntil = 0;
+
+function spawnMeteor() {
+  const fromLeft = Math.random() < 0.5;
+  const x = fromLeft ? rand(-80, W * 0.4) : rand(W * 0.6, W + 80);
+  const y = rand(-60, H * 0.35);
+  const ang = rand(Math.PI * 0.18, Math.PI * 0.34) + (fromLeft ? 0 : Math.PI * 0.5);
+  const sp = rand(7, 13);
+  meteors.push({
+    x, y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp,
+    life: 1, decay: rand(0.006, 0.012), len: rand(70, 150),
+  });
+}
+
+/* ---------- 超新星爆发粒子 ---------- */
+const bursts = [];
+function supernova(x, y, color) {
+  const n = 26;
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2 + rand(-0.2, 0.2);
+    const sp = rand(1.2, 4.5);
+    bursts.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 1, decay: rand(0.008, 0.02), r: rand(1, 2.4), c: color });
+  }
+  bursts.push({ x, y, vx: 0, vy: 0, life: 1, decay: 0.03, r: 3, c: "#ffffff", flash: true });
+}
+
+/* ---------- 五声音阶 & 环境音 ---------- */
+let audioCtx = null, masterGain = null, padNodes = [], soundOn = false;
+const PENTA = [261.63, 293.66, 329.63, 392.0, 440.0, 523.25, 587.33, 659.25, 784.0];
+
+function ensureAudio() {
+  if (audioCtx) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  masterGain = audioCtx.createGain();
+  masterGain.gain.value = 0.0;
+  masterGain.connect(audioCtx.destination);
+  startPad();
+}
+
+function startPad() {
+  // 极轻的持续和弦垫：Cmaj9，双振荡器微失谐 + 低通 + 缓慢呼吸
+  const freqs = [130.81, 164.81, 196.0, 246.94];
+  const padGain = audioCtx.createGain();
+  padGain.gain.value = 0.05;
+  const lp = audioCtx.createBiquadFilter();
+  lp.type = "lowpass"; lp.frequency.value = 620; lp.Q.value = 0.4;
+  padGain.connect(lp); lp.connect(masterGain);
+  freqs.forEach(f => {
+    [-4, 4].forEach(det => {
+      const o = audioCtx.createOscillator();
+      o.type = "sawtooth"; o.frequency.value = f; o.detune.value = det;
+      o.connect(padGain); o.start();
+      padNodes.push(o);
+    });
+  });
+  const lfo = audioCtx.createOscillator(), lfoG = audioCtx.createGain();
+  lfo.frequency.value = 0.06; lfoG.gain.value = 0.025;
+  lfo.connect(lfoG); lfoG.connect(padGain.gain); lfo.start();
+  padNodes.push(lfo);
+}
+
+function pluck(freq, vel) {
+  if (!audioCtx || !soundOn) return;
+  const t = audioCtx.currentTime;
+  const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+  o.type = "sine"; o.frequency.value = freq;
+  const o2 = audioCtx.createOscillator(), g2 = audioCtx.createGain();
+  o2.type = "triangle"; o2.frequency.value = freq * 2;
+  g2.gain.value = 0.25;
+  o2.connect(g2); g2.connect(g);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.28 * vel, t + 0.015);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 2.2);
+  o.connect(g); g.connect(masterGain);
+  o.start(t); o2.start(t); o.stop(t + 2.4); o2.stop(t + 2.4);
+}
+
+const soundBtn = document.getElementById("soundBtn");
+soundBtn.addEventListener("click", () => {
+  ensureAudio();
+  soundOn = !soundOn;
+  soundBtn.classList.toggle("on", soundOn);
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  masterGain.gain.cancelScheduledValues(t);
+  masterGain.gain.linearRampToValueAtTime(soundOn ? 0.9 : 0.0, t + 1.2);
+});
+
+/* ---------- 许愿 ---------- */
+let wishes = 0;
+const wishCountEl = document.getElementById("wishCount");
+const toastEl = document.getElementById("toast");
+let toastTimer = null;
+
+function showToast(text) {
+  toastEl.textContent = text;
+  toastEl.classList.add("on");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove("on"), 3200);
+}
+
+const MILESTONES = { 1: "第一颗愿望已升空", 7: "七曜同辉", 20: "流星雨为你而至 ✦", 50: "半百星辰，皆你所愿", 100: "百愿之夜，心想事成" };
+
+function makeWish(x, y, starM) {
+  wishes++;
+  wishCountEl.textContent = wishes;
+  const noteIdx = Math.min(PENTA.length - 1, Math.round((starM / 1.8) * (PENTA.length - 1)));
+  pluck(PENTA[noteIdx], rand(0.7, 1.0));
+  if (MILESTONES[wishes]) {
+    showToast(MILESTONES[wishes]);
+    if (wishes === 20) showerUntil = performance.now() + 9000;
+  }
+  supernova(x, y, "#ffe9b8");
+}
+
+/* ---------- 悬停星座 ---------- */
+const tooltip = document.getElementById("tooltip");
+let hovered = null; // { ci, si }
+
+function findHover(mx, my) {
+  for (let ci = 0; ci < CONSTELLATIONS.length; ci++) {
+    const c = CONSTELLATIONS[ci];
+    for (let si = 0; si < c.stars.length; si++) {
+      const p = project(c.stars[si].x, c.stars[si].y, 1);
+      const d = Math.hypot(mx - p.x, my - p.y);
+      if (d < 16) return { ci, si, p };
+    }
+  }
+  return null;
+}
+
+window.addEventListener("click", e => {
+  if (e.target === soundBtn) return;
+  const h = findHover(e.clientX, e.clientY);
+  if (h) {
+    makeWish(h.p.x, h.p.y, CONSTELLATIONS[h.ci].stars[h.si].m);
+  } else {
+    makeWish(e.clientX, e.clientY, rand(0.6, 1.4));
+  }
+});
+
+/* ---------- 时钟 ---------- */
+const clockEl = document.getElementById("clock");
+function tickClock() {
+  const d = new Date();
+  clockEl.textContent = [d.getHours(), d.getMinutes(), d.getSeconds()]
+    .map(v => String(v).padStart(2, "0")).join(":");
+}
+setInterval(tickClock, 1000); tickClock();
+
+/* ---------- 主循环 ---------- */
+function drawStar(x, y, r, color, alpha, glow) {
+  ctx.globalAlpha = alpha;
+  if (glow) {
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r * 5);
+    g.addColorStop(0, color);
+    g.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, y, r * 5, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.fillStyle = color;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(50, now - last); last = now;
+  drift += dt * 0.001;
+
+  /* 夜空底色：缓慢呼吸的蓝紫渐变 */
+  const breath = Math.sin(drift * 0.13) * 0.5 + 0.5;
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, `rgb(${5 + breath * 4}, ${7 + breath * 3}, ${22 + breath * 6})`);
+  grad.addColorStop(0.6, "#070a1c");
+  grad.addColorStop(1, "#0d0a1e");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+
+  /* 背景星野 */
+  for (const s of bgStars) {
+    const p = project(s.x, s.y, s.layer);
+    if (p.x < -10 || p.x > W + 10 || p.y < -10 || p.y > H + 10) continue;
+    const tw = 0.45 + 0.55 * (Math.sin(drift * s.tw + s.ph) * 0.5 + 0.5);
+    drawStar(p.x, p.y, s.r, s.c, tw * (0.4 + s.layer * 0.6), s.r > 1.6 && tw > 0.85);
+  }
+
+  /* 星座 */
+  hovered = findHover(mouse.x, mouse.y);
+  for (let ci = 0; ci < CONSTELLATIONS.length; ci++) {
+    const c = CONSTELLATIONS[ci];
+    const hot = hovered && hovered.ci === ci;
+    // 连线
+    ctx.lineWidth = hot ? 1.6 : 1;
+    ctx.strokeStyle = hot ? "rgba(190, 208, 255, 0.85)" : "rgba(140, 165, 255, 0.28)";
+    ctx.beginPath();
+    for (const [a, b] of c.lines) {
+      const pa = project(c.stars[a].x, c.stars[a].y, 1);
+      const pb = project(c.stars[b].x, c.stars[b].y, 1);
+      ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y);
+    }
+    ctx.stroke();
+    // 星点
+    for (let si = 0; si < c.stars.length; si++) {
+      const s = c.stars[si];
+      const p = project(s.x, s.y, 1);
+      const tw = 0.75 + 0.25 * Math.sin(drift * 1.4 + si * 1.7 + ci);
+      drawStar(p.x, p.y, s.m * (hot ? 1.35 : 1), s.c, tw, true);
+      if (hot) {
+        ctx.strokeStyle = "rgba(255, 233, 184, 0.5)";
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(p.x, p.y, 10 + Math.sin(drift * 3) * 2, 0, Math.PI * 2); ctx.stroke();
+      }
+    }
+  }
+
+  /* 流星 */
+  if (now > nextMeteor) { spawnMeteor(); nextMeteor = now + (now < showerUntil ? rand(120, 420) : rand(2200, 6500)); }
+  for (let i = meteors.length - 1; i >= 0; i--) {
+    const m = meteors[i];
+    m.x += m.vx; m.y += m.vy; m.life -= m.decay;
+    if (m.life <= 0 || m.x > W + 200 || m.y > H + 200) { meteors.splice(i, 1); continue; }
+    const tail = { x: m.x - m.vx * (m.len / 10), y: m.y - m.vy * (m.len / 10) };
+    const g = ctx.createLinearGradient(m.x, m.y, tail.x, tail.y);
+    g.addColorStop(0, `rgba(255, 250, 235, ${0.9 * m.life})`);
+    g.addColorStop(1, "rgba(255, 250, 235, 0)");
+    ctx.strokeStyle = g; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(m.x, m.y); ctx.lineTo(tail.x, tail.y); ctx.stroke();
+  }
+
+  /* 超新星粒子 */
+  for (let i = bursts.length - 1; i >= 0; i--) {
+    const b = bursts[i];
+    b.x += b.vx; b.y += b.vy;
+    b.vx *= 0.965; b.vy *= 0.965;
+    b.life -= b.decay;
+    if (b.life <= 0) { bursts.splice(i, 1); continue; }
+    if (b.flash) {
+      const g = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, 40 * (1 - b.life) + 8);
+      g.addColorStop(0, `rgba(255,255,255,${b.life * 0.9})`);
+      g.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(b.x, b.y, 50, 0, Math.PI * 2); ctx.fill();
+    } else {
+      drawStar(b.x, b.y, b.r * b.life, b.c, b.life);
+    }
+  }
+
+  /* 提示框 */
+  if (hovered) {
+    const c = CONSTELLATIONS[hovered.ci], s = c.stars[hovered.si];
+    tooltip.querySelector(".t-name").innerHTML = `${c.name}<span>${c.latin.toUpperCase()}</span>`;
+    tooltip.querySelector(".t-star").textContent = s.n;
+    tooltip.querySelector(".t-lore").textContent = c.lore;
+    tooltip.style.left = Math.min(W - 300, hovered.p.x + 18) + "px";
+    tooltip.style.top = Math.min(H - 120, hovered.p.y + 18) + "px";
+    tooltip.classList.add("on");
+    canvas.style.cursor = "pointer";
+  } else {
+    tooltip.classList.remove("on");
+    canvas.style.cursor = "crosshair";
+  }
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
